@@ -60,7 +60,7 @@ export class Toggle {
     selector ??= `[data-index="${mark.index}"]`;
     const groups = new Set(svg.querySelectorAll(selector));
 
-    svg.addEventListener('pointerdown', evt => {
+    svg.addEventListener('mousedown', evt => {
       const state = selection.single ? selection.value : this.value;
       const target = evt.target;
       let value = null;
