@@ -7,7 +7,7 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/uwdata/mosaic.git"
+    "url": "https://github.com/unemyr/mosaic.git"
   },
   "scripts": {
     "docs:dev": "vitepress dev docs",
