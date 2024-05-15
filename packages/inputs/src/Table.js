@@ -17,7 +17,10 @@ export class Table extends MosaicClient {
     filterBy,
     from,
     columns = ['*'],
+    columnAliases = {},
     align = {},
+    styleHeaders = {},
+    styleRows = {},
     format,
     width,
     maxWidth,
@@ -29,6 +32,7 @@ export class Table extends MosaicClient {
     this.from = from;
     this.columns = columns;
     this.format = format;
+    this.columnAliases = columnAliases
     this.align = align;
     this.widths = typeof width === 'object' ? width : {};
 
@@ -40,6 +44,8 @@ export class Table extends MosaicClient {
     this.sortColumn = null;
     this.sortDesc = false;
 
+    this.styleHeaders = styleHeaders
+    this.styleRows = styleRows
     this.element = element || document.createElement('div');
     this.element.setAttribute('id', this.id);
     this.element.value = this;
@@ -101,7 +107,7 @@ export class Table extends MosaicClient {
       const th = document.createElement('th');
       th.addEventListener('click', evt => this.sort(evt, column));
       th.appendChild(document.createElement('span'));
-      th.appendChild(document.createTextNode(column));
+      th.appendChild(document.createTextNode((this.columnAliases && this.columnAliases[column]) ? this.columnAliases[column] : column));
       tr.appendChild(th);
     }
     thead.appendChild(tr);
@@ -112,6 +118,8 @@ export class Table extends MosaicClient {
     // get column alignment style
     this.style.innerText = tableCSS(
       this.id,
+      this.styleHeaders,
+      this.styleRows,
       alignof(this.align, info),
       widthof(this.widths, info)
     );
@@ -166,6 +174,8 @@ export class Table extends MosaicClient {
   }
 
   sort(event, column) {
+    if (event) event.stopPropagation()
+
     if (column === this.sortColumn) {
       this.sortDesc = !this.sortDesc;
     } else {
@@ -220,15 +230,21 @@ function widthof(base = {}, schema) {
   return schema.map(({ column }) => base[column]);
 }
 
-function tableCSS(id, aligns, widths) {
+function tableCSS(id, styleHeaders, styleRows, aligns, widths) {
   const styles = [];
+
+  // Headers
+  styles.push(`#${id} th { ${styleHeaders} }`);
+
+  // Columns
   aligns.forEach((a, i) => {
     const w = +widths[i];
     if (a !== 'left' || w) {
       const align = a !== 'left' ? `text-align:${a};` : '';
       const width = w ? `width:${w}px;max-width:${w}px;` : '';
-      styles.push(`#${id} tr>:nth-child(${i+1}) {${align}${width}}`);
+      styles.push(`#${id} tr>:nth-child(${i+1}) {${align}${width} ${styleRows}}`);
     }
+    else styles.push(`#${id} tr>:nth-child(${i+1}) { ${styleRows}}`);
   });
   return styles.join(' ');
 }
