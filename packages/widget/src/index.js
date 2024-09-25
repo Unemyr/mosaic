@@ -1,7 +1,5 @@
-import { coordinator, namedPlots } from '@uwdata/vgplot';
-import { isSelection } from '@uwdata/mosaic-core';
+import { coordinator, decodeIPC, isSelection } from '@uwdata/mosaic-core';
 import { parseSpec, astToDOM } from '@uwdata/mosaic-spec';
-import * as arrow from 'apache-arrow';
 import './style.css';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -9,24 +7,24 @@ import { v4 as uuidv4 } from 'uuid';
  * @typedef {Record<string, {value: unknown, predicate?: string}>} Params
  *
  * @typedef Model
- * @prop {import('@uwdata/mosaic-spec').Spec} spec the current specification
- * @prop {boolean} temp_indexes whether data cube indexes should be created as temp tables
- * @prop {Params} params the current params
+ * @property {import('@uwdata/mosaic-spec').Spec} spec
+ *  The current Mosaic specification.
+ * @property {string} data_cube_schema The database schema in which to store
+ *  data cube index tables (default 'mosaic').
+ * @property {Params} params The current params.
  */
 
 export default {
   /** @type {import('anywidget/types').Initialize<Model>} */
-  // eslint-disable-next-line no-unused-vars
-  initialize(view) {},
+  initialize(view) {
+    view.model.set('data_cube_schema', coordinator().dataCubeIndexer.schema);
+  },
 
   /** @type {import('anywidget/types').Render<Model>} */
   render(view) {
     view.el.classList.add('mosaic-widget');
-
     const getSpec = () => view.model.get('spec');
-
-    const getTempIndexes = () => view.model.get('temp_indexes');
-
+    const getDataCubeSchema = () => view.model.get('data_cube_schema');
     const logger = coordinator().logger();
 
     /** @type Map<string, {query: Record<any, unknown>, startTime: number, resolve: (value: any) => void, reject: (reason?: any) => void}> */
@@ -57,7 +55,6 @@ export default {
 
     function reset() {
       coordinator().clear();
-      namedPlots.clear();
     }
 
     async function updateSpec() {
@@ -93,11 +90,10 @@ export default {
     view.model.on('change:spec', () => updateSpec());
 
     function configureCoordinator() {
-      const indexes = { temp: getTempIndexes() };
-      coordinator().configure({ indexes });
+      coordinator().dataCubeIndexer.schema = getDataCubeSchema();
     }
 
-    view.model.on('change:temp_indexes', () => configureCoordinator());
+    view.model.on('change:data_cube_schema', () => configureCoordinator());
 
     view.model.on('msg:custom', (msg, buffers) => {
       logger.group(`query ${msg.uuid}`);
@@ -114,7 +110,7 @@ export default {
       } else {
         switch (msg.type) {
           case 'arrow': {
-            const table = arrow.tableFromIPC(buffers[0].buffer);
+            const table = decodeIPC(buffers[0].buffer);
             logger.log('table', table);
             query.resolve(table);
             break;
@@ -145,6 +141,8 @@ export default {
 };
 
 function instantiateSpec(spec) {
-  const ast = parseSpec(spec);
-  return astToDOM(ast);
+  // parse specification, and instantiate it
+  // astToDOM creates a new vgplot API context with the
+  // standard coordinator and a custom namedPlots map
+  return astToDOM(parseSpec(spec));
 }

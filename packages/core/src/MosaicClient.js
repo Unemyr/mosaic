@@ -94,8 +94,8 @@ export class MosaicClient {
    * @param {*} error
    * @returns {this}
    */
-  queryError(error) {
-    console.error(error);
+  queryError(error) { // eslint-disable-line no-unused-vars
+    // do nothing, the coordinator logs the error
     return this;
   }
 
@@ -103,6 +103,7 @@ export class MosaicClient {
    * Request the coordinator to execute a query for this client.
    * If an explicit query is not provided, the client query method will
    * be called, filtered by the current filterBy selection.
+   * @returns {Promise}
    */
   requestQuery(query) {
     const q = query || this.query(this.filterBy?.predicate(this));
@@ -120,9 +121,17 @@ export class MosaicClient {
   }
 
   /**
+   * Reset this client, initiating new field info and query requests.
+   * @returns {Promise}
+   */
+  initialize() {
+    return this._coordinator.initializeClient(this);
+  }
+
+  /**
    * Requests a client update.
    * For example to (re-)render an interface component.
-   * 
+   *
    * @returns {this | Promise<any>}
    */
   update() {

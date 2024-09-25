@@ -10,6 +10,13 @@ export function isSelection(x) {
   return x instanceof Selection;
 }
 
+function create(options, include) {
+  return new Selection(
+    new SelectionResolver(options),
+    include ? [include].flat() : include
+  );
+}
+
 /**
  * Represents a dynamic set of query filter predicates.
  */
@@ -22,10 +29,16 @@ export class Selection extends Param {
    * @param {boolean} [options.cross=false] Boolean flag indicating
    *  cross-filtered resolution. If true, selection clauses will not
    *  be applied to the clients they are associated with.
+   * @param {boolean} [options.empty=false] Boolean flag indicating if a lack
+   *  of clauses should correspond to an empty selection with no records. This
+   *  setting determines the default selection state.
+   * @param {Selection|Selection[]} [options.include] Upstream selections whose
+   *  clauses should be included as part of the new selection. Any clauses
+   *  published to upstream selections will be relayed to the new selection.
    * @returns {Selection} The new Selection instance.
    */
-  static intersect({ cross = false } = {}) {
-    return new Selection(new SelectionResolver({ cross }));
+  static intersect({ cross = false, empty = false, include = [] } = {}) {
+    return create({ cross, empty }, include);
   }
 
   /**
@@ -35,10 +48,16 @@ export class Selection extends Param {
    * @param {boolean} [options.cross=false] Boolean flag indicating
    *  cross-filtered resolution. If true, selection clauses will not
    *  be applied to the clients they are associated with.
+   * @param {boolean} [options.empty=false] Boolean flag indicating if a lack
+   *  of clauses should correspond to an empty selection with no records. This
+   *  setting determines the default selection state.
+   * @param {Selection|Selection[]} [options.include] Upstream selections whose
+   *  clauses should be included as part of the new selection. Any clauses
+   *  published to upstream selections will be relayed to the new selection.
    * @returns {Selection} The new Selection instance.
    */
-  static union({ cross = false } = {}) {
-    return new Selection(new SelectionResolver({ cross, union: true }));
+  static union({ cross = false, empty = false, include = [] } = {}) {
+    return create({ cross, empty, union: true }, include);
   }
 
   /**
@@ -48,30 +67,53 @@ export class Selection extends Param {
    * @param {boolean} [options.cross=false] Boolean flag indicating
    *  cross-filtered resolution. If true, selection clauses will not
    *  be applied to the clients they are associated with.
+   * @param {boolean} [options.empty=false] Boolean flag indicating if a lack
+   *  of clauses should correspond to an empty selection with no records. This
+   *  setting determines the default selection state.
+   * @param {Selection|Selection[]} [options.include] Upstream selections whose
+   *  clauses should be included as part of the new selection. Any clauses
+   *  published to upstream selections will be relayed to the new selection.
    * @returns {Selection} The new Selection instance.
    */
-  static single({ cross = false } = {}) {
-    return new Selection(new SelectionResolver({ cross, single: true }));
+  static single({ cross = false, empty = false, include = [] } = {}) {
+    return create({ cross, empty, single: true }, include);
   }
 
   /**
    * Create a new Selection instance with a
    * cross-filtered intersect resolution strategy.
+   * @param {object} [options] The selection options.
+   * @param {boolean} [options.empty=false] Boolean flag indicating if a lack
+   *  of clauses should correspond to an empty selection with no records. This
+   *  setting determines the default selection state.
+   * @param {Selection|Selection[]} [options.include] Upstream selections whose
+   *  clauses should be included as part of the new selection. Any clauses
+   *  published to upstream selections will be relayed to the new selection.
    * @returns {Selection} The new Selection instance.
    */
-  static crossfilter() {
-    return new Selection(new SelectionResolver({ cross: true }));
+  static crossfilter({ empty = false, include = [] } = {}) {
+    return create({ cross: true, empty }, include);
   }
 
   /**
    * Create a new Selection instance.
-   * @param {SelectionResolver} resolver The selection resolution
+   * @param {SelectionResolver} [resolver] The selection resolution
    *  strategy to apply.
+   * @param {Selection[]} [include] Upstream selections whose clauses
+   * should be included as part of this selection. Any clauses published
+   * to these upstream selections will be relayed to this selection.
    */
-  constructor(resolver = new SelectionResolver()) {
+  constructor(resolver = new SelectionResolver(), include = []) {
     super([]);
     this._resolved = this._value;
     this._resolver = resolver;
+    /** @type {Set<Selection>} */
+    this._relay = new Set;
+    if (Array.isArray(include)) {
+      for (const sel of include) {
+        sel._relay.add(this);
+      }
+    }
   }
 
   /**
@@ -98,6 +140,27 @@ export class Selection extends Param {
   }
 
   /**
+   * The selection clause resolver.
+   */
+  get resolver() {
+    return this._resolver;
+  }
+
+  /**
+   * Indicate if this selection has a single resolution strategy.
+   */
+  get single() {
+    return this._resolver.single;
+  }
+
+  /**
+   * The current array of selection clauses.
+   */
+  get clauses() {
+    return super.value;
+  }
+
+  /**
    * The current active (most recently updated) selection clause.
    */
   get active() {
@@ -109,22 +172,16 @@ export class Selection extends Param {
    * This method ensures compatibility where a normal Param is expected.
    */
   get value() {
-    // return value of the active clause
     return this.active?.value;
   }
 
   /**
-   * The current array of selection clauses.
+   * The value corresponding to a given source. Returns undefined if
+   * this selection does not include a clause from this source.
+   * @param {*} source The clause source to look up the value for.
    */
-  get clauses() {
-    return super.value;
-  }
-
-  /**
-   * Indicate if this selection has a single resolution strategy.
-   */
-  get single() {
-    return this._resolver.single;
+  valueFor(source) {
+    return this.clauses.find(c => c.source === source)?.value;
   }
 
   /**
@@ -133,6 +190,7 @@ export class Selection extends Param {
    */
   activate(clause) {
     this.emit('activate', clause);
+    this._relay.forEach(sel => sel.activate(clause));
   }
 
   /**
@@ -145,6 +203,7 @@ export class Selection extends Param {
     // this ensures consistent clause state across unemitted event values
     this._resolved = this._resolver.resolve(this._resolved, clause, true);
     this._resolved.active = clause;
+    this._relay.forEach(sel => sel.update(clause));
     return super.update(this._resolved);
   }
 
@@ -217,11 +276,15 @@ export class SelectionResolver {
    *  If false, an intersection strategy is used.
    * @param {boolean} [options.cross=false] Boolean flag to indicate cross-filtering.
    * @param {boolean} [options.single=false] Boolean flag to indicate single clauses only.
+   * @param {boolean} [options.empty=false] Boolean flag indicating if a lack
+   *  of clauses should correspond to an empty selection with no records. This
+   *  setting determines the default selection state.
    */
-  constructor({ union, cross, single } = {}) {
+  constructor({ union, cross, single, empty } = {}) {
     this.union = !!union;
     this.cross = !!cross;
     this.single = !!single;
+    this.empty = !!empty;
   }
 
   /**
@@ -259,7 +322,11 @@ export class SelectionResolver {
    *  based on the current state of this selection.
    */
   predicate(clauseList, active, client) {
-    const { union } = this;
+    const { empty, union } = this;
+
+    if (empty && !clauseList.length) {
+      return ['FALSE'];
+    }
 
     // do nothing if cross-filtering and client is currently active
     if (this.skip(client, active)) return undefined;

@@ -2,7 +2,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 import jsdoc from 'eslint-plugin-jsdoc';
 
-/** @type {import('@types/eslint').Linter.FlatConfig[]} */
+/** @type {import('@types/eslint').Linter.Config[]} */
 export default [
   js.configs.recommended,
   {
@@ -11,7 +11,7 @@ export default [
       sourceType: "module",
       globals: {
         ...globals.browser,
-        ...globals.mocha,
+        ...globals.jest,
         ...globals.node,
         ...globals.es6,
         globalThis: false
