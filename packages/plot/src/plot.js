@@ -146,6 +146,11 @@ export class Plot {
     return this;
   }
 
+  get plotRender() {
+    this.render()
+    return undefined;
+  }
+
   get markSet() {
     return this.markset || (this.markset = new Set(this.marks));
   }
