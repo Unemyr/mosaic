@@ -1,56 +1,85 @@
 import { consolidator } from './QueryConsolidator.js';
 import { lruCache, voidCache } from './util/cache.js';
 import { PriorityQueue } from './util/priority-queue.js';
-import { QueryResult } from './util/query-result.js';
+import { QueryResult, QueryState } from './util/query-result.js';
+import { voidLogger } from './util/void-logger.js';
 
-export const Priority = { High: 0, Normal: 1, Low: 2 };
+export const Priority = Object.freeze({ High: 0, Normal: 1, Low: 2 });
 
 export class QueryManager {
-  constructor() {
+  constructor(
+    maxConcurrentRequests = 32
+  ) {
     this.queue = new PriorityQueue(3);
     this.db = null;
     this.clientCache = null;
-    this._logger = null;
+    this._logger = voidLogger();
     this._logQueries = false;
-    this.recorders = [];
-    this.pending = null;
     this._consolidate = null;
+    /**
+     * Requests pending with the query manager.
+     * 
+     * @type {QueryResult[]}
+     */
+    this.pendingResults = [];
+    this.maxConcurrentRequests = maxConcurrentRequests;
+    this.pendingExec = false;
   }
 
   next() {
-    if (this.pending || this.queue.isEmpty()) return;
+    if (this.queue.isEmpty() || this.pendingResults.length > this.maxConcurrentRequests || this.pendingExec) {
+      return;
+    }
+
     const { request, result } = this.queue.next();
-    this.pending = this.submit(request, result);
-    this.pending.finally(() => { this.pending = null; this.next(); });
+
+    this.pendingResults.push(result);
+    if (request.type === 'exec') this.pendingExec = true;
+
+    this.submit(request, result).finally(() => {
+      // return from the queue all requests that are ready
+      while (this.pendingResults.length && this.pendingResults[0].state !== QueryState.pending) {
+        const result = this.pendingResults.shift();
+        if (result.state === QueryState.ready) {
+          result.fulfill();
+        } else if (result.state === QueryState.done) {
+          this._logger.warn('Found resolved query in pending results.');
+        }
+      }
+      if (request.type === 'exec') this.pendingExec = false;
+      this.next();
+    });
   }
 
+  /**
+   * Add an entry to the query queue with a priority.
+   * @param {object} entry The entry to add.
+   * @param {*} [entry.request] The query request.
+   * @param {QueryResult} [entry.result] The query result.
+   * @param {number} priority The query priority, defaults to `Priority.Normal`.
+   */
   enqueue(entry, priority = Priority.Normal) {
     this.queue.insert(entry, priority);
     this.next();
   }
 
-  recordQuery(sql) {
-    if (this.recorders.length && sql) {
-      this.recorders.forEach(rec => rec.add(sql));
-    }
-  }
-
+  /**
+   * Submit the query to the connector.
+   * @param {*} request The request.
+   * @param {QueryResult} result The query result.
+   */
   async submit(request, result) {
     try {
-      const { query, type, cache = false, record = true, options } = request;
+      const { query, type, cache = false, options } = request;
       const sql = query ? `${query}` : null;
-
-      // update recorders
-      if (record) {
-        this.recordQuery(sql);
-      }
 
       // check query cache
       if (cache) {
         const cached = this.clientCache.get(sql);
         if (cached) {
+          const data = await cached;
           this._logger.debug('Cache');
-          result.fulfill(cached);
+          result.ready(data);
           return;
         }
       }
@@ -60,10 +89,16 @@ export class QueryManager {
       if (this._logQueries) {
         this._logger.debug('Query', { type, sql, ...options });
       }
-      const data = await this.db.query({ type, sql, ...options });
+
+      const promise = this.db.query({ type, sql, ...options });
+      if (cache) this.clientCache.set(sql, promise);
+
+      const data = await promise;
+
       if (cache) this.clientCache.set(sql, data);
+
       this._logger.debug(`Request: ${(performance.now() - t0).toFixed(1)}`);
-      result.fulfill(data);
+      result.ready(type === 'exec' ? null : data);
     } catch (err) {
       result.reject(err);
     }
@@ -89,12 +124,18 @@ export class QueryManager {
 
   consolidate(flag) {
     if (flag && !this._consolidate) {
-      this._consolidate = consolidator(this.enqueue.bind(this), this.clientCache, this.recordQuery.bind(this));
+      this._consolidate = consolidator(this.enqueue.bind(this), this.clientCache);
     } else if (!flag && this._consolidate) {
       this._consolidate = null;
     }
   }
 
+  /**
+   * Request a query result.
+   * @param {*} request The request.
+   * @param {number} priority The query priority, defaults to `Priority.Normal`.
+   * @returns {QueryResult} A query result promise.
+   */
   request(request, priority = Priority.Normal) {
     const result = new QueryResult();
     const entry = { request, result };
@@ -116,6 +157,12 @@ export class QueryManager {
         }
         return false;
       });
+
+      for (const result of this.pendingResults) {
+        if (set.has(result)) {
+          result.reject('Canceled');
+        }
+      }
     }
   }
 
@@ -124,26 +171,10 @@ export class QueryManager {
       result.reject('Cleared');
       return true;
     });
-  }
 
-  record() {
-    let state = [];
-    const recorder = {
-      add(query) {
-        state.push(query);
-      },
-      reset() {
-        state = [];
-      },
-      snapshot() {
-        return state.slice();
-      },
-      stop() {
-        this.recorders = this.recorders.filter(x => x !== recorder);
-        return state;
-      }
-    };
-    this.recorders.push(recorder);
-    return recorder;
+    for (const result of this.pendingResults) {
+      result.reject('Cleared');
+    }
+    this.pendingResults = [];
   }
 }

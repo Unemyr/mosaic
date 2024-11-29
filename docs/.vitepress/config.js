@@ -86,6 +86,7 @@ export default defineConfig({
             { text: 'Axes & Gridlines', link: '/examples/axes' },
             { text: 'Airline Travelers', link: '/examples/airline-travelers' },
             { text: 'Aeromagnetic Survey', link: '/examples/aeromagnetic-survey' },
+            { text: 'Athlete Birth Waffle', link: '/examples/athlete-birth-waffle' },
             { text: 'Driving Shifts into Reverse', link: '/examples/driving-shifts' },
             { text: 'Population Arrows', link: '/examples/population-arrows' },
             { text: 'Presidential Opinion', link: '/examples/presidential-opinion' },
@@ -133,6 +134,7 @@ export default defineConfig({
             { text: 'Gaia Star Catalog', link: '/examples/gaia' },
             { text: 'Observable Latency', link: '/examples/observable-latency' },
             { text: 'Olympic Athletes', link: '/examples/athletes' },
+            { text: 'Protein Design', link: '/examples/protein-design' },
             { text: 'Pan & Zoom', link: '/examples/pan-zoom' },
             { text: 'Scatter Plot Matrix', link: '/examples/splom' },
             { text: 'Seattle Weather', link: '/examples/weather' }
