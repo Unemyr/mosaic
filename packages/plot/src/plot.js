@@ -20,9 +20,12 @@ export class Plot {
     this.element = element || document.createElement('div');
     this.element.setAttribute('class', 'plot');
     this.element.style.display = 'flex';
+    this.element.style.width = '100%';
+    this.element.style.flexWrap = 'wrap';
     this.element.value = this;
     this.params = new Map;
     this.synch = synchronizer();
+    this.postRenderTasks = undefined;
   }
 
   margins() {
@@ -70,6 +73,7 @@ export class Plot {
       return include ? el : [];
     });
     this.element.replaceChildren(svg, ...legends);
+    if (this.postRenderTasks) this.postRenderTasks(svg)
     this.synch.resolve();
   }
 
