@@ -31,11 +31,10 @@ export class Plot {
 
     /** @type {HTMLElement} */
     this.element = element || document.createElement('div');
-    Object.assign(this.element, { value: this });
     this.element.setAttribute('class', 'plot');
     this.element.style.display = 'flex';
-    this.element.style.flexWrap = 'wrap';
-    this.element.style.width = '100%';
+    Object.assign(this.element, { value: this });
+
     this.postRenderTasks = undefined;
   }
 
