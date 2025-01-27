@@ -1,5 +1,6 @@
 #!/bin/sh
 npm run build
+yalc publish packages/core
 yalc publish packages/inputs
 yalc publish packages/plot
 yalc publish packages/sql

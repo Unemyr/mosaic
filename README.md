@@ -86,3 +86,14 @@ To use Mosaic with DuckDB-WASM in Observable Notebooks:
 To use Mosaic and DuckDB in Observable Framework:
 
 * See the [Mosaic + Framework example site](https://github.com/uwdata/mosaic-framework-example).
+
+## Modifications in this fork vs vanilla Mosaic:
+
+This fork maintains amendments to the Mosaic library intended for the automated dashboard generation service [Sprucely.io](https://www.sprucely.io).
+
+Notable changes:
+
+* Addition of a postRenderTasks() callback that allow you to modify the generated SVG content directly after it has been re-generated
+* Fix for the invert() function for better interactor support across different data types (experimental)
+* Mousedown fix to better support Toggle for categorical data
+* Allow for custom CSS styling of the Table widget
