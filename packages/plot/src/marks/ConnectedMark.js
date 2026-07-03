@@ -24,11 +24,11 @@ export class ConnectedMark extends Mark {
 
     const ortho = dim === 'x' ? 'y' : 'x';
     const value = this.channelField(ortho, { exact: true })?.as;
-    const { field, as, type, min, max } = this.channelField(dim);
+    const { field, as, type, count, min, max } = this.channelField(dim);
     const isContinuous = type === 'date' || type === 'number';
 
     const size = dim === 'x' ? plot.innerWidth() : plot.innerHeight();
-    optimize = true; // threshold for applying M4
+    optimize ??= (count / size) > 10; // threshold for applying M4
 
     if (optimize && isContinuous && value) {
       // TODO: handle stacked data
@@ -39,7 +39,7 @@ export class ConnectedMark extends Mark {
         .filter(c => c !== as && c !== value);
       return m4(q, expr, as, value, cols);
     } else {
-      return q.orderby(field);
+      return q.orderby(as);
     }
   }
 }
