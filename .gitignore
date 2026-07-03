@@ -14,3 +14,11 @@ packages/*/test-output
 **/.mypy_cache
 **/.coverage
 **/.venv
+
+# Commit built dist for the packages consumed by sprucely-runtime so it can
+# reference them directly from GitHub (no local checkout/build required).
+!packages/core/dist
+!packages/sql/dist
+!packages/inputs/dist
+!packages/plot/dist
+!packages/vgplot/dist
